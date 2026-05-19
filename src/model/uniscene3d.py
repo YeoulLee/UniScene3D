@@ -6,7 +6,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 from torch.amp import autocast
-from transformers import AutoConfig, AutoModel, AutoTokenizer
+from transformers import AutoModel, AutoTokenizer
 
 from common.misc import build_fgclip_model_from_local_code_with_hf_weights
 from model.build import MODEL_REGISTRY, BaseModel
@@ -38,16 +38,7 @@ class UniScene3D(BaseModel):
             self.set_training_mode()
         else:
             jina_root = str(Path(__file__).resolve().parents[1] / "jina-clip-v2")
-            jina_emb_root = str(Path(__file__).resolve().parents[1] / "jina-embeddings-v3")
-
-            jina_config = AutoConfig.from_pretrained(jina_root, trust_remote_code=True, local_files_only=True)
-            for cfg_obj in (jina_config, getattr(jina_config, "text_config", None)):
-                if cfg_obj is not None and hasattr(cfg_obj, "hf_model_name_or_path"):
-                    cfg_obj.hf_model_name_or_path = jina_emb_root
-
-            self.text_encoder = AutoModel.from_pretrained(
-                jina_root, config=jina_config, trust_remote_code=True, local_files_only=True,
-            )
+            self.text_encoder = AutoModel.from_pretrained(jina_root, trust_remote_code=True, local_files_only=True)
             self.tokenizer = AutoTokenizer.from_pretrained(jina_root, trust_remote_code=True, local_files_only=True)
             self.text_encoder.text_model.output_tokens = True
             self.set_downstream_mode()
