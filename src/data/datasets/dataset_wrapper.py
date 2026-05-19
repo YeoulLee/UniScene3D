@@ -22,8 +22,8 @@ class SceneDatasetWrapper(Dataset):
         self.dataset = dataset
         self.num_views = cfg.get("num_views", 32)
         model_root = str(Path(__file__).resolve().parents[2] / "fg-clip")
-        self.tokenizer = AutoTokenizer.from_pretrained(model_root)
-        self.image_processor = AutoImageProcessor.from_pretrained(model_root)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_root, local_files_only=True)
+        self.image_processor = AutoImageProcessor.from_pretrained(model_root, local_files_only=True)
         self.use_scene_cap = cfg.data.args.get("use_scene_cap", False)
 
     def __len__(self):
