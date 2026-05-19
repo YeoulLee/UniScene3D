@@ -37,8 +37,9 @@ class UniScene3D(BaseModel):
             # Pretraining uses a trainable encoder plus a frozen teacher copy.
             self.set_training_mode()
         else:
-            self.text_encoder = AutoModel.from_pretrained('jinaai/jina-clip-v2', trust_remote_code=True)
-            self.tokenizer =  AutoTokenizer.from_pretrained('jinaai/jina-clip-v2', trust_remote_code=True)
+            jina_root = str(Path(__file__).resolve().parents[1] / "jina-clip-v2")
+            self.text_encoder = AutoModel.from_pretrained(jina_root, trust_remote_code=True, local_files_only=True)
+            self.tokenizer =  AutoTokenizer.from_pretrained(jina_root, trust_remote_code=True, local_files_only=True)
             self.text_encoder.text_model.output_tokens = True
             self.set_downstream_mode()
 

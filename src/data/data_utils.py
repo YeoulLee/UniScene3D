@@ -1,5 +1,6 @@
 """Dataset-side helper functions and answer vocab classes."""
 
+import os
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -31,8 +32,21 @@ def _find_cached_hf_file(repo_id, filename, repo_type="dataset"):
     return str(matches[0])
 
 
+def _find_local_scenepoint_file(filename):
+    """Look up a ScenePoint file inside SCENEPOINT_LOCAL_DIR if it is set."""
+    local_root = os.environ.get("SCENEPOINT_LOCAL_DIR")
+    if not local_root:
+        return None
+    local_path = Path(local_root) / filename
+    return str(local_path) if local_path.is_file() else None
+
+
 def load_safetensor_from_hf(repo_id, filename, repo_type="dataset"):
     """Load a safetensor file from Hugging Face or the local cache."""
+    local_path = _find_local_scenepoint_file(filename)
+    if local_path is not None:
+        return load_file(local_path)
+
     if HF_HUB_OFFLINE:
         cached_path = _find_cached_hf_file(repo_id=repo_id, filename=filename, repo_type=repo_type)
         if cached_path is None:

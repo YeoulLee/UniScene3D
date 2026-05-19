@@ -44,6 +44,17 @@ def build_fgclip_model_from_local_code_with_hf_weights(
     repo_type=DEFAULT_FGCLIP_REPO_TYPE,
 ):
     local_model_root = Path(local_model_root)
+    local_weight = local_model_root / weight_filename
+
+    if local_weight.is_file():
+        model = AutoModelForCausalLM.from_pretrained(
+            str(local_model_root),
+            trust_remote_code=True,
+            local_files_only=True,
+        )
+        print(f"Loaded FG-CLIP weights from local {local_weight}")
+        return model
+
     weight_path = hf_hub_download(
         repo_id=repo_id,
         filename=weight_filename,
