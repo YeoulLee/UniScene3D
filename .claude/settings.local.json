@@ -4,7 +4,8 @@
       "Bash(mkdir -p .qwen_research)",
       "Bash(curl -s \"https://raw.githubusercontent.com/huggingface/transformers/main/src/transformers/models/qwen3_5/modeling_qwen3_5.py\" -o .qwen_research/modeling_qwen3_5.py)",
       "Bash(curl -s \"https://raw.githubusercontent.com/huggingface/transformers/main/src/transformers/models/qwen3_5/modular_qwen3_5.py\" -o .qwen_research/modular_qwen3_5.py)",
-      "Bash(curl -s \"https://raw.githubusercontent.com/huggingface/transformers/main/src/transformers/models/qwen3_5/configuration_qwen3_5.py\" -o .qwen_research/configuration_qwen3_5.py)"
+      "Bash(curl -s \"https://raw.githubusercontent.com/huggingface/transformers/main/src/transformers/models/qwen3_5/configuration_qwen3_5.py\" -o .qwen_research/configuration_qwen3_5.py)",
+      "Bash(gh api *)"
     ]
   }
 }
