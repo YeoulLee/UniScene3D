@@ -121,12 +121,12 @@ class SQA3DEval():
             if gt_id not in self.color_ids:
                 total_non_color += 1
             
-            count_type[data_dict['sqa_type'][i].item()] += 1
+            count_type[int(data_dict['sqa_type'][i])] += 1
             if data_dict['answer_label'][i, choice_1[i]] == 1:
                 if choice_1[i] not in self.color_ids:
                     non_color_correct1 += 1
                 correct1 += 1
-                correct_type[data_dict['sqa_type'][i].item()] += 1
+                correct_type[int(data_dict['sqa_type'][i])] += 1
             for j in range(10):
                 if data_dict['answer_label'][i, choice_10[i, j]] == 1:
                     if choice_10[i,j] not in self.color_ids:
