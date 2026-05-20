@@ -9,7 +9,7 @@ from pathlib import Path
 
 import torch
 from torch.amp import autocast
-from transformers import AutoTokenizer, Qwen3_5ForConditionalGeneration
+from transformers import AutoModelForImageTextToText, AutoTokenizer
 
 from common.misc import build_fgclip_model_from_local_code_with_hf_weights
 from model.build import MODEL_REGISTRY, BaseModel
@@ -41,7 +41,7 @@ class UniScene3DQwen(BaseModel):
 
         # --- Qwen3.5 language model (vision tower loaded but unused) ---
         qwen_path = m.qwen_model_path
-        self.qwen = Qwen3_5ForConditionalGeneration.from_pretrained(
+        self.qwen = AutoModelForImageTextToText.from_pretrained(
             qwen_path, dtype=torch.bfloat16, local_files_only=True,
         )
         self.tokenizer = AutoTokenizer.from_pretrained(qwen_path, local_files_only=True)
