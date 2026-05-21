@@ -128,10 +128,13 @@ class BaseTrainer():
             if hasattr(self.model, "pm_encoder"):
                 self.model.pm_encoder.load_state_dict(self.model.pm_encoder.state_dict())
 
-        # Let Accelerate wrap the model, optimizer, and dataloaders for the chosen backend.
-        self.model, self.loss, self.optimizer, self.scheduler = self.accelerator.prepare(
-            self.model, self.loss, self.optimizer, self.scheduler
+        # Let Accelerate wrap the model, optimizer, and dataloaders for the chosen
+        # backend. The loss module is not prepared: DeepSpeed allows only one model
+        # per Accelerator, and the loss is paramless here -- just move it to device.
+        self.model, self.optimizer, self.scheduler = self.accelerator.prepare(
+            self.model, self.optimizer, self.scheduler
         )
+        self.loss = self.loss.to(self.accelerator.device)
         for name, loader in self.data_loaders.items():
             if isinstance(loader, list):
                 loader = self.accelerator.prepare(*loader)
