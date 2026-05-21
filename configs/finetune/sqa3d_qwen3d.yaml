@@ -57,7 +57,7 @@ solver:
   epochs_per_eval: 1
   lr: 2e-5                 # full fine-tuning of the Qwen LLM (projector_lr is separate)
   grad_norm: 1.0
-  epochs: 10
+  epochs: 5
   optim:
     name: "AdamW"
     args:
