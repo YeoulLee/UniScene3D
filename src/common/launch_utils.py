@@ -1,6 +1,7 @@
 """Helpers for launching jobs on local or cluster backends."""
 
 import os
+from datetime import datetime
 from pathlib import Path
 import subprocess
 
@@ -83,8 +84,11 @@ def accelerate_launch(args):
     """
     Single node script launching with Accelerate
     """
+    # Generate the run timestamp once here so every distributed process shares
+    # one exp_dir (otherwise each process calls datetime.now() and diverges).
+    run_timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     opts = " ".join(args.opts) if len(args.opts) > 0 else ""
-    opts += f" num_gpu={args.num_nodes * args.gpu_per_node} "
+    opts += f" num_gpu={args.num_nodes * args.gpu_per_node} +run_timestamp={run_timestamp} "
     multi_gpu = "--multi_gpu" if args.num_nodes * args.gpu_per_node > 1 else ""
     full_cfg_path = Path(args.config)
     cfg_path, cfg_file = str(full_cfg_path.parent), str(full_cfg_path.name)

@@ -53,7 +53,10 @@ def main(cfg):
     print(exp_name)
 
     if not cfg.exp_dir:
-        cfg.exp_dir = Path(cfg.base_dir) / exp_name / f"{datetime.now().strftime('%Y-%m-%d-%H:%M:%S.%f')}"
+        # Use the launcher-provided timestamp so all distributed processes share
+        # one exp_dir; fall back to now() for a direct `python run.py`.
+        run_ts = cfg.get("run_timestamp", None) or datetime.now().strftime('%Y-%m-%d-%H:%M:%S.%f')
+        cfg.exp_dir = Path(cfg.base_dir) / exp_name / str(run_ts)
     else:
         cfg.exp_dir = Path(cfg.exp_dir)
     make_dir(cfg.exp_dir)
