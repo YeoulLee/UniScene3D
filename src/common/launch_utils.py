@@ -90,10 +90,15 @@ def accelerate_launch(args):
     opts = " ".join(args.opts) if len(args.opts) > 0 else ""
     opts += f" num_gpu={args.num_nodes * args.gpu_per_node} +run_timestamp={run_timestamp} "
     multi_gpu = "--multi_gpu" if args.num_nodes * args.gpu_per_node > 1 else ""
+    deepspeed = ""
+    if getattr(args, "deepspeed", ""):
+        # --use_deepspeed replaces --multi_gpu (a different distributed backend).
+        deepspeed = f"--use_deepspeed --deepspeed_config_file {args.deepspeed}"
+        multi_gpu = ""
     full_cfg_path = Path(args.config)
     cfg_path, cfg_file = str(full_cfg_path.parent), str(full_cfg_path.name)
     cmd = f"{huggingface_fix} accelerate launch --num_machines {args.num_nodes} \
-        {multi_gpu} \
+        {multi_gpu} {deepspeed} \
         --mixed_precision {args.mixed_precision} \
         --num_processes {args.gpu_per_node * args.num_nodes} \
         --num_cpu_threads_per_process {args.cpu_per_task} \

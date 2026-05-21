@@ -58,6 +58,8 @@ def parse_args():
     # Accelerate settings
     parser.add_argument("--mixed_precision", default="no", type=str,
                         help="Mixed precision training, options (no | fp16 | bf16)")
+    parser.add_argument("--deepspeed", default="", type=str,
+                        help="Path to a DeepSpeed config JSON; enables DeepSpeed when set")
 
     # Additional Training settings
     parser.add_argument("--config", default="configs/default.yaml", type=str,

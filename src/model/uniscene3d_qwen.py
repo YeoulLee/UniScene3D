@@ -48,12 +48,15 @@ class UniScene3DQwen(BaseModel):
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         llm_dim = self.qwen.config.text_config.hidden_size  # 2560
-        for p in self.qwen.parameters():
-            p.requires_grad = False
 
-        # --- Stage 2: LoRA on the Qwen LLM ---
-        self.use_lora = m.get("use_lora", False)
-        if self.use_lora:
+        # --- Qwen tuning mode: "full" | "lora" | "frozen" ---
+        self.qwen_tuning = m.get("qwen_tuning", "full")
+        if self.qwen_tuning not in ("full", "lora", "frozen"):
+            raise ValueError(f"unknown qwen_tuning '{self.qwen_tuning}'")
+        if self.qwen_tuning in ("frozen", "lora"):
+            for p in self.qwen.parameters():
+                p.requires_grad = False
+        if self.qwen_tuning == "lora":
             from peft import LoraConfig, get_peft_model
             lora = m.get("lora", {})
             default_targets = [
@@ -68,6 +71,11 @@ class UniScene3DQwen(BaseModel):
                 target_modules=list(lora.get("target_modules", default_targets)),
                 task_type="CAUSAL_LM",
             ))
+        # Gradient checkpointing keeps Qwen training within GPU memory.
+        if self.qwen_tuning != "frozen" and m.get("gradient_checkpointing", True):
+            self.qwen.gradient_checkpointing_enable(
+                gradient_checkpointing_kwargs={"use_reentrant": False}
+            )
 
         # --- 3D scene token modules (projector is trainable) ---
         self.voxel_pool = VoxelPooling(
@@ -212,5 +220,10 @@ class UniScene3DQwen(BaseModel):
         return [t.strip() for t in texts]
 
     def get_opt_params(self):
-        """Trainable param groups: projector (+ LoRA adapters in Stage 2)."""
-        return no_decay_param_group(self.named_parameters(), self.cfg.solver.lr)
+        """Trainable param groups: projector (own lr) + trainable Qwen params."""
+        proj_lr = self.cfg.model.get("projector_lr", self.cfg.solver.lr)
+        groups = no_decay_param_group(self.projector.named_parameters(), proj_lr)
+        qwen_named = [(n, p) for n, p in self.qwen.named_parameters() if p.requires_grad]
+        if qwen_named:
+            groups += no_decay_param_group(qwen_named, self.cfg.solver.lr)
+        return groups

@@ -55,8 +55,8 @@ solver:
   gradient_accumulation_steps: 1
   epochs_per_save: 100     # only latest.pth / best.pth saved within this run
   epochs_per_eval: 1
-  lr: 1e-3                 # Stage 1 (projector only). Stage 2 (+LoRA): ~2e-4
-  grad_norm: 5.0
+  lr: 2e-5                 # full fine-tuning of the Qwen LLM (projector_lr is separate)
+  grad_norm: 1.0
   epochs: 10
   optim:
     name: "AdamW"
@@ -79,8 +79,10 @@ model:
   num_visual_tokens: 512
   max_new_tokens: 16
   use_vision: True         # False = text-only baseline (no visual tokens)
-  use_lora: False          # Stage 1: projector only. Stage 2: set True
-  lora:
+  qwen_tuning: "full"      # "full" | "lora" | "frozen"
+  gradient_checkpointing: True
+  projector_lr: 1e-3       # projector trains faster than the LLM
+  lora:                    # used only when qwen_tuning: "lora"
     r: 16
     alpha: 32
     dropout: 0.05
