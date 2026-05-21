@@ -78,6 +78,7 @@ model:
   voxel_size: 0.2
   num_visual_tokens: 512
   max_new_tokens: 16
+  use_vision: True         # False = text-only baseline (no visual tokens)
   use_lora: False          # Stage 1: projector only. Stage 2: set True
   lora:
     r: 16

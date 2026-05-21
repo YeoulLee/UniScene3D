@@ -74,6 +74,12 @@ class Qwen3DTrainer(BaseTrainer):
 
     def run(self):
         """Train, evaluate per epoch, and checkpoint."""
+        if self.mode == "test":
+            # Eval-only: one generation pass, no training (e.g. text-only baseline).
+            self.eval_step(0, split="val")
+            self.accelerator.end_training()
+            return
+
         num_trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         self.accelerator.print(f"Trainable parameters: {num_trainable:,}")
 

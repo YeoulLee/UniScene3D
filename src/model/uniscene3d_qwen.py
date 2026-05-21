@@ -78,6 +78,8 @@ class UniScene3DQwen(BaseModel):
         self.projector = Qwen3DProjector(in_dim=_FGCLIP_VIS_DIM, out_dim=llm_dim)
 
         self.max_new_tokens = m.get("max_new_tokens", 16)
+        # use_vision=False feeds text only (no visual tokens) -> text-only baseline.
+        self.use_vision = m.get("use_vision", True)
 
     def train(self, mode=True):
         """Keep the frozen FG-CLIP encoder in eval mode regardless of mode."""
@@ -122,11 +124,9 @@ class UniScene3DQwen(BaseModel):
     # ---- training forward ----------------------------------------------
     def forward(self, data_dict):
         """Training forward; returns {'loss': causal-LM loss on the answer span}."""
-        visual_embeds, voxel_mask = self._scene_tokens(data_dict)
-        B, N = voxel_mask.shape
-        device = visual_embeds.device
         embed = self.qwen.get_input_embeddings()
-        visual_embeds = visual_embeds.to(embed.weight.dtype)
+        device = embed.weight.device
+        B = len(data_dict["question"])
         pad_id, eos_id = self.tokenizer.pad_token_id, self.tokenizer.eos_token_id
 
         seqs, label_seqs = [], []
@@ -149,15 +149,19 @@ class UniScene3DQwen(BaseModel):
             text_mask.append([1] * len(seq) + [0] * n_pad)
             text_labels.append(lab + [-100] * n_pad)
         text_ids = torch.tensor(text_ids, device=device)
-        text_mask = torch.tensor(text_mask, device=device)
-        text_labels = torch.tensor(text_labels, device=device)
+        attention_mask = torch.tensor(text_mask, device=device)
+        labels = torch.tensor(text_labels, device=device)
+        inputs_embeds = embed(text_ids)
 
-        inputs_embeds = torch.cat([visual_embeds, embed(text_ids)], dim=1)
-        attention_mask = torch.cat([voxel_mask.long(), text_mask], dim=1)
-        labels = torch.cat([
-            torch.full((B, N), -100, dtype=torch.long, device=device),
-            text_labels,
-        ], dim=1)
+        if self.use_vision:
+            visual_embeds, voxel_mask = self._scene_tokens(data_dict)
+            N = voxel_mask.shape[1]
+            visual_embeds = visual_embeds.to(embed.weight.dtype)
+            inputs_embeds = torch.cat([visual_embeds, inputs_embeds], dim=1)
+            attention_mask = torch.cat([voxel_mask.long(), attention_mask], dim=1)
+            labels = torch.cat([
+                torch.full((B, N), -100, dtype=torch.long, device=device), labels,
+            ], dim=1)
 
         out = self.qwen(
             inputs_embeds=inputs_embeds,
@@ -170,11 +174,9 @@ class UniScene3DQwen(BaseModel):
     @torch.no_grad()
     def generate(self, data_dict):
         """Greedy-generate the answer text for each sample; returns list[str]."""
-        visual_embeds, voxel_mask = self._scene_tokens(data_dict)
-        B = voxel_mask.shape[0]
-        device = visual_embeds.device
         embed = self.qwen.get_input_embeddings()
-        visual_embeds = visual_embeds.to(embed.weight.dtype)
+        device = embed.weight.device
+        B = len(data_dict["question"])
         pad_id = self.tokenizer.pad_token_id
 
         prompts = [
@@ -191,10 +193,14 @@ class UniScene3DQwen(BaseModel):
             text_ids.append([pad_id] * n_pad + p_ids)        # left-pad for generation
             text_mask.append([0] * n_pad + [1] * len(p_ids))
         text_ids = torch.tensor(text_ids, device=device)
-        text_mask = torch.tensor(text_mask, device=device)
+        attention_mask = torch.tensor(text_mask, device=device)
+        inputs_embeds = embed(text_ids)
 
-        inputs_embeds = torch.cat([visual_embeds, embed(text_ids)], dim=1)
-        attention_mask = torch.cat([voxel_mask.long(), text_mask], dim=1)
+        if self.use_vision:
+            visual_embeds, voxel_mask = self._scene_tokens(data_dict)
+            visual_embeds = visual_embeds.to(embed.weight.dtype)
+            inputs_embeds = torch.cat([visual_embeds, inputs_embeds], dim=1)
+            attention_mask = torch.cat([voxel_mask.long(), attention_mask], dim=1)
 
         gen_ids = self.qwen.generate(
             inputs_embeds=inputs_embeds,
