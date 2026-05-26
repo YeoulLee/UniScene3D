@@ -1,28 +1,31 @@
 #!/bin/bash
-# Parameterised experiment runner for the UniScene3D + Qwen3.5 full-FT pipeline.
-# Override any hyperparameter via an environment variable, e.g.:
-#   LR=1e-5 VOXEL_SIZE=0.1 bash scripts/vqa3d/sqa3d_qwen3d_exp.sh
-# Sweep example:
-#   for lr in 1e-5 2e-5 5e-5; do LR=$lr TAG=lrsweep bash scripts/vqa3d/sqa3d_qwen3d_exp.sh; done
+# Capacity + situation-aware-PE run: agent_pose ON, more visual tokens,
+# finer voxel grid. Designed as the next experiment after the EM-0.51 plateau
+# (epoch-10 dropped vs epoch-5, use_unanswer=False barely changed) which
+# indicated the bottleneck is geometric grounding + visual capacity, not
+# training length or distribution tail.
+#
+# Override anything via env vars, e.g.:
+#   USE_AGENT_POSE=False bash scripts/vqa3d/sqa3d_qwen3d_agentpose.sh   # ablate
+#   GPUS=4 NUM_TOKENS=768 bash scripts/vqa3d/sqa3d_qwen3d_agentpose.sh
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-# ==== HYPERPARAMETERS (override via env vars) ====
-LR="${LR:-2e-5}"                  # Qwen full-FT learning rate
-PROJ_LR="${PROJ_LR:-1e-3}"        # projector learning rate
-VOXEL_SIZE="${VOXEL_SIZE:-0.2}"   # 3D voxel size in metres
-NUM_TOKENS="${NUM_TOKENS:-512}"   # visual token budget
-EPOCHS="${EPOCHS:-5}"
-USE_VISION="${USE_VISION:-True}"  # False = text-only control
-USE_AGENT_POSE="${USE_AGENT_POSE:-True}"  # situation-aware 3D PE
+# ==== HYPERPARAMETERS (overridable) ====
+LR="${LR:-2e-5}"
+PROJ_LR="${PROJ_LR:-1e-3}"
+VOXEL_SIZE="${VOXEL_SIZE:-0.1}"        # finer grid so the extra tokens land on distinct voxels
+NUM_TOKENS="${NUM_TOKENS:-1024}"       # 2x capacity vs the 512-token baseline
+EPOCHS="${EPOCHS:-5}"                  # epoch 10 was overfit on the previous setup
+USE_VISION="${USE_VISION:-True}"
+USE_AGENT_POSE="${USE_AGENT_POSE:-True}"  # situation pose -> agent-frame 3D PE
 GPUS="${GPUS:-8}"
-GRAD_ACCUM="${GRAD_ACCUM:-1}"
-TAG="${TAG:-run1}"
+GRAD_ACCUM="${GRAD_ACCUM:-2}"          # safety for the longer sequence; drop to 1 if no OOM
+TAG="${TAG:-ap_cap}"
 
 CONFIG="configs/finetune/sqa3d_qwen3d.yaml"
 DS_CONFIG="configs/deepspeed_zero2.json"
 
-# Auto-named so each hyperparameter combo lands in its own results folder.
 EXP_NAME="qwen3d_lr${LR}_plr${PROJ_LR}_vox${VOXEL_SIZE}_tok${NUM_TOKENS}_ep${EPOCHS}_vis${USE_VISION}_ap${USE_AGENT_POSE}_${TAG}"
 NOTE="$EXP_NAME"
 cd "${PROJECT_ROOT}"
@@ -40,11 +43,10 @@ LOGFILE="$LOGDIR/${EXP_NAME}_$TIMESTAMP.log"
 echo "[INFO] Experiment: $EXP_NAME"
 echo "[INFO] Logging to: $LOGFILE"
 
-# ==== OFFLINE HF (corporate network blocks huggingface.co) ====
+# ==== OFFLINE HF ====
 export TOKENIZERS_PARALLELISM=false
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
-# export SCENEPOINT_LOCAL_DIR=/path/to/ScenePoint   # if ScenePoint is not in the HF cache
 
 # ==== LAUNCH ====
 python launch.py --mode accelerate --gpu_per_node "$GPUS" --num_nodes 1 \
@@ -60,4 +62,5 @@ python launch.py --mode accelerate --gpu_per_node "$GPUS" --num_nodes 1 \
     solver.epochs="$EPOCHS" \
     solver.gradient_accumulation_steps="$GRAD_ACCUM" \
     model.use_vision="$USE_VISION" \
-    model.use_agent_pose="$USE_AGENT_POSE"
+    model.use_agent_pose="$USE_AGENT_POSE" \
+    2>&1 | tee "$LOGFILE"
