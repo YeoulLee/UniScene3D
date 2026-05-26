@@ -2,6 +2,8 @@
 
 import random
 
+import torch
+
 from ..build import DATASET_REGISTRY
 from ..data_utils import get_sqa_question_type, load_safetensor_from_hf
 from .scannet import ScanNetSQA3D
@@ -38,6 +40,12 @@ class ScanNetSQA3DGen(ScanNetSQA3D):
         point_map = scene_tensor['point_map'].permute(0, 3, 1, 2)
         images = scene_tensor['color_images'].permute(0, 3, 1, 2)
 
+        # SQA3D annotation provides agent pose (position + rotation as quaternion);
+        # downstream the model can transform voxel coords into the agent's frame
+        # for situation-aware 3D position encoding.
+        agent_position = torch.tensor(item['position'], dtype=torch.float32)   # (3,)
+        agent_rotation = torch.tensor(item['rotation'], dtype=torch.float32)   # (4,) (x,y,z,w)
+
         return {
             "situation": situation,                              # str
             "question": question,                                # str
@@ -45,6 +53,8 @@ class ScanNetSQA3DGen(ScanNetSQA3D):
             "answer_list": answer_list,                          # list[str], all GT for eval EM
             "point_map": point_map,                              # (V, 3, H, W)
             "images": images,                                    # (V, 3, H, W)
+            "agent_position": agent_position,                    # (3,)
+            "agent_rotation": agent_rotation,                    # (4,)
             "sqa_type": get_sqa_question_type(question),         # int 0-5
             "scan_id": scan_id,                                  # str
             "data_idx": item_id,                                 # question id

@@ -80,6 +80,7 @@ model:
   num_visual_tokens: 512
   max_new_tokens: 32
   use_vision: True         # False = text-only baseline (no visual tokens)
+  use_agent_pose: True     # transform voxel coords into the agent's frame before the 3D PE
   qwen_tuning: "full"      # "full" | "lora" | "frozen"
   gradient_checkpointing: True
   projector_lr: 1e-3       # projector trains faster than the LLM

@@ -14,7 +14,11 @@ from transformers import AutoModelForImageTextToText, AutoTokenizer
 
 from common.misc import build_fgclip_model_from_local_code_with_hf_weights
 from model.build import MODEL_REGISTRY, BaseModel
-from modules.coord_pe import Sinusoidal3DPositionEncoding, extract_patch_coords
+from modules.coord_pe import (
+    Sinusoidal3DPositionEncoding,
+    extract_patch_coords,
+    world_to_agent_frame,
+)
 from modules.qwen3d_projector import Qwen3DProjector
 from modules.voxel_pooling import VoxelPooling
 from optim.utils import no_decay_param_group
@@ -89,6 +93,10 @@ class UniScene3DQwen(BaseModel):
         self.max_new_tokens = m.get("max_new_tokens", 16)
         # use_vision=False feeds text only (no visual tokens) -> text-only baseline.
         self.use_vision = m.get("use_vision", True)
+        # use_agent_pose=True transforms voxel coords into the agent's local
+        # frame before the 3D PE, so situation pose is injected geometrically
+        # instead of being learned purely from the textual situation sentence.
+        self.use_agent_pose = m.get("use_agent_pose", True)
 
     def train(self, mode=True):
         """Keep the frozen FG-CLIP encoder in eval mode regardless of mode."""
@@ -121,6 +129,12 @@ class UniScene3DQwen(BaseModel):
         patch_tokens = self._encode_patches(data_dict["images"], data_dict["point_map"])
         coords, valid = extract_patch_coords(data_dict["point_map"], self.patch_size)
         voxel_feat, voxel_coord, voxel_mask = self.voxel_pool(patch_tokens, coords, valid)
+        if self.use_agent_pose and "agent_position" in data_dict:
+            voxel_coord = world_to_agent_frame(
+                voxel_coord,
+                data_dict["agent_position"].to(voxel_coord),
+                data_dict["agent_rotation"].to(voxel_coord),
+            )
         with autocast("cuda", dtype=torch.bfloat16):
             voxel_feat = voxel_feat + self.coord_pe(voxel_coord)  # (B, N, vis_dim)
             visual_embeds = self.projector(voxel_feat)            # (B, N, llm_dim)

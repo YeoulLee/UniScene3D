@@ -73,3 +73,44 @@ class Sinusoidal3DPositionEncoding(nn.Module):
         ang = coords.float().unsqueeze(-1) * self.freqs  # (..., 3, half)
         pe = torch.cat([ang.sin(), ang.cos()], dim=-1)   # (..., 3, 2*half)
         return pe.flatten(-2)                            # (..., dim)
+
+
+def quaternion_to_rotation_matrix(quat):
+    """Convert (x, y, z, w) quaternions to 3x3 rotation matrices.
+
+    Args:
+        quat: (..., 4) tensor in (x, y, z, w) order (SQA3D convention).
+
+    Returns:
+        (..., 3, 3) rotation matrix R such that p_world = R @ p_local.
+    """
+    quat = quat / quat.norm(dim=-1, keepdim=True).clamp_min(1e-8)
+    x, y, z, w = quat.unbind(-1)
+    xx, yy, zz = x * x, y * y, z * z
+    xy, xz, yz = x * y, x * z, y * z
+    wx, wy, wz = w * x, w * y, w * z
+    R = torch.stack([
+        1 - 2 * (yy + zz), 2 * (xy - wz),     2 * (xz + wy),
+        2 * (xy + wz),     1 - 2 * (xx + zz), 2 * (yz - wx),
+        2 * (xz - wy),     2 * (yz + wx),     1 - 2 * (xx + yy),
+    ], dim=-1)
+    return R.reshape(*quat.shape[:-1], 3, 3)
+
+
+def world_to_agent_frame(coords, agent_pos, agent_quat):
+    """Transform world-frame coords into the agent's local frame.
+
+    Args:
+        coords:      (B, N, 3) world-frame points.
+        agent_pos:   (B, 3) agent position in world frame.
+        agent_quat:  (B, 4) agent rotation in world frame, (x, y, z, w).
+
+    Returns:
+        (B, N, 3) coords expressed relative to the agent (translation removed,
+        rotation inverted), so a point in front of the agent has positive y
+        (or whatever convention the SQA3D pose follows).
+    """
+    R = quaternion_to_rotation_matrix(agent_quat)         # (B, 3, 3) world<-agent
+    R_inv = R.transpose(-1, -2)                           # (B, 3, 3) agent<-world
+    rel = coords - agent_pos.unsqueeze(1)                 # (B, N, 3)
+    return torch.einsum("bij,bnj->bni", R_inv, rel)
