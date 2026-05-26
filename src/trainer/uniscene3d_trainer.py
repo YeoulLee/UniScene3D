@@ -89,7 +89,9 @@ class UniScene3DTrainer(BaseTrainer):
                 self.train_step(epoch, mode=self.mode)
 
                 self.accelerator.wait_for_everyone()
-                if self.accelerator.is_main_process and self.epochs_per_save and (epoch + 1) % self.epochs_per_save == 0:
+                # save_state is a collective under DeepSpeed (each rank writes its
+                # own shard), so every rank must call it.
+                if self.epochs_per_save and (epoch + 1) % self.epochs_per_save == 0:
                     self.save(f"ckpt_{epoch+1}.pth")
 
             self.save(f"ckpt_{epoch+1}.pth")
@@ -109,11 +111,17 @@ class UniScene3DTrainer(BaseTrainer):
                     is_best = False
 
                 self.accelerator.wait_for_everyone()
-                if self.accelerator.is_main_process:
-                    if is_best:
-                        self.save("best.pth")
-                    if self.epochs_per_save and (epoch + 1) % self.epochs_per_save == 0:
-                        self.save(f"ckpt_{epoch+1}.pth")
+                # save_state is a collective under DeepSpeed (each rank writes its
+                # own shard), so every rank must call it. Sync is_best across ranks
+                # so all processes agree on whether to also save best.pth.
+                is_best_t = torch.tensor(
+                    [1 if is_best else 0], device=self.accelerator.device
+                )
+                is_best = bool(self.accelerator.gather(is_best_t)[0].item())
+                if is_best:
+                    self.save("best.pth")
+                if self.epochs_per_save and (epoch + 1) % self.epochs_per_save == 0:
+                    self.save(f"ckpt_{epoch+1}.pth")
 
         self.test_step()
         if self.mode == "train":
