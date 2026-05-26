@@ -147,14 +147,26 @@ class BaseTrainer():
         # In test mode we want to load a fully trained checkpoint without going
         # through run.py's resume-reload path (which would clobber CLI overrides).
         if self.mode == "test" and cfg.get("ckpt_path"):
-            # Prefer a consolidated `pytorch_model.bin` produced by zero_to_fp32.py.
+            # Prefer a consolidated checkpoint produced by zero_to_fp32.py.
             # Loaded into the unwrapped module so it works regardless of the
             # current DP world size (vs accelerator.load_state which requires
             # the same world size as when the checkpoint was saved).
+            # zero_to_fp32.py outputs either a single .bin/.pt file (older DS)
+            # or a directory of safetensors shards (newer DS).
             consolidated = self.ckpt_path / "pytorch_model.bin"
-            if consolidated.exists():
+            state_dict = None
+            if consolidated.is_dir():
+                shards = sorted(glob.glob(str(consolidated / "*.safetensors")))
+                if shards:
+                    print(f"📂 Loading consolidated safetensors shards from: {consolidated}")
+                    state_dict = {}
+                    for shard in shards:
+                        state_dict.update(load_file(shard, device="cpu"))
+            elif consolidated.is_file():
                 print(f"📂 Loading consolidated weights from: {consolidated}")
                 state_dict = torch.load(str(consolidated), map_location="cpu")
+
+            if state_dict is not None:
                 raw_model = self.accelerator.unwrap_model(self.model)
                 missing, unexpected = raw_model.load_state_dict(state_dict, strict=False)
                 print(f"   missing: {len(missing)}, unexpected: {len(unexpected)}")
