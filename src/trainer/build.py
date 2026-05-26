@@ -156,12 +156,20 @@ class BaseTrainer():
             consolidated = self.ckpt_path / "pytorch_model.bin"
             state_dict = None
             if consolidated.is_dir():
-                shards = sorted(glob.glob(str(consolidated / "*.safetensors")))
-                if shards:
-                    print(f"📂 Loading consolidated safetensors shards from: {consolidated}")
+                # Newer DS: directory of *.safetensors shards.
+                # HF-style sharded torch save: directory of *.bin shards + index.json.
+                st_shards = sorted(glob.glob(str(consolidated / "*.safetensors")))
+                bin_shards = sorted(glob.glob(str(consolidated / "*.bin")))
+                if st_shards:
+                    print(f"📂 Loading consolidated safetensors shards ({len(st_shards)}) from: {consolidated}")
                     state_dict = {}
-                    for shard in shards:
+                    for shard in st_shards:
                         state_dict.update(load_file(shard, device="cpu"))
+                elif bin_shards:
+                    print(f"📂 Loading consolidated .bin shards ({len(bin_shards)}) from: {consolidated}")
+                    state_dict = {}
+                    for shard in bin_shards:
+                        state_dict.update(torch.load(shard, map_location="cpu"))
             elif consolidated.is_file():
                 print(f"📂 Loading consolidated weights from: {consolidated}")
                 state_dict = torch.load(str(consolidated), map_location="cpu")
