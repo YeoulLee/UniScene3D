@@ -27,6 +27,9 @@ NUM_TOKENS="${NUM_TOKENS:-512}"
 USE_VISION="${USE_VISION:-True}"
 GPUS="${GPUS:-8}"
 TAG="${TAG:-test1}"
+# True = include all test questions (paper convention). False = restrict to
+# questions whose GT answer is in the 706-class candidate set (diagnostic only).
+USE_UNANSWER="${USE_UNANSWER:-True}"
 
 CONFIG="configs/finetune/sqa3d_qwen3d.yaml"
 DS_CONFIG="configs/deepspeed_zero2.json"
@@ -67,4 +70,6 @@ python launch.py --mode accelerate --gpu_per_node "$GPUS" --num_nodes 1 \
     model.voxel_size="$VOXEL_SIZE" \
     model.num_visual_tokens="$NUM_TOKENS" \
     model.use_vision="$USE_VISION" \
+    data.ScanNetSQA3DGen.test.use_unanswer="$USE_UNANSWER" \
+    eval.save=True \
     2>&1 | tee "$LOGFILE"

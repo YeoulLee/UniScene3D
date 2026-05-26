@@ -426,9 +426,12 @@ class ScanNetSQA3D(ScanNetBase):
         anno_file = os.path.join(self.base_dir,
             f'annotations/sqa3d/balanced/v1_balanced_sqa_annotations_{self.split}_scannetv2.json')
         json_data = json.load(open(anno_file, 'r', encoding='utf-8'))['annotations']
-        
+
         for item in json_data:
-            if self.use_unanswer or (len(set(item['answers']) & set(self.answer_cands)) > 0):
+            # SQA3D stores answers as a list of dicts ({"answer": str, ...});
+            # extract the strings before building the set.
+            answer_strs = [a['answer'] for a in item['answers']]
+            if self.use_unanswer or (len(set(answer_strs) & set(self.answer_cands)) > 0):
                 scan_ids.add(item['scene_id'])
                 lang_data.append(item)
         print(f'{self.split} unanswerable question {len(json_data) - len(lang_data)},'
