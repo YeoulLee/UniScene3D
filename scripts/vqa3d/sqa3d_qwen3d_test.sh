@@ -61,8 +61,7 @@ python launch.py --mode accelerate --gpu_per_node "$GPUS" --num_nodes 1 \
     --deepspeed "$DS_CONFIG" \
     --config "$CONFIG" \
     mode=test \
-    resume=True \
-    ckpt_path="$CKPT_PATH" \
+    ++ckpt_path="$CKPT_PATH" \
     note="$NOTE" \
     name="$EXP_NAME" \
     model.voxel_size="$VOXEL_SIZE" \

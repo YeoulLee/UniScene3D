@@ -144,7 +144,9 @@ class BaseTrainer():
         self.accelerator.register_for_checkpointing(self.exp_tracker)
 
         self.ckpt_path = Path(cfg.ckpt_path) if cfg.get("ckpt_path") else Path(cfg.exp_dir) / "ckpt" / "best.pth"
-        if cfg.resume:
+        # In test mode we want to load a fully trained checkpoint without going
+        # through run.py's resume-reload path (which would clobber CLI overrides).
+        if cfg.resume or (self.mode == "test" and cfg.get("ckpt_path")):
             self.resume()
 
     def forward(self, data_dict):

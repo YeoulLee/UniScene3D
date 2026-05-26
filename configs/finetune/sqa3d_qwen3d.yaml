@@ -9,6 +9,7 @@ base_dir: "results"
 exp_dir: ""
 
 resume: False
+ckpt_path: ""           # set via CLI for eval-only runs (mode=test)
 
 debug:
   flag: False
