@@ -5,6 +5,7 @@ projector -> Qwen3.5 language model. The Qwen vision tower is bypassed: visual
 tokens are concatenated with text token embeddings and fed as `inputs_embeds`.
 """
 
+import re
 from pathlib import Path
 
 import torch
@@ -217,7 +218,22 @@ class UniScene3DQwen(BaseModel):
             do_sample=False,
         )
         texts = self.tokenizer.batch_decode(gen_ids, skip_special_tokens=True)
-        return [t.strip() for t in texts]
+        return [self._postprocess_answer(t) for t in texts]
+
+    @staticmethod
+    def _postprocess_answer(text):
+        """Strip <think> blocks, leaked prompt prefix, and post-answer fluff.
+
+        Qwen3 may emit a <think>...</think> reasoning block before the answer,
+        and even with skip_special_tokens=True the literal tags can survive.
+        We also drop a leaked 'Answer:' prefix and keep only the first line.
+        """
+        text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+        text = re.sub(r"</?think>", "", text)
+        text = text.strip()
+        text = text.split("\n", 1)[0]
+        text = re.sub(r"^\s*answer\s*:\s*", "", text, flags=re.IGNORECASE)
+        return text.strip()
 
     def get_opt_params(self):
         """Trainable param groups: projector (own lr) + trainable Qwen params."""

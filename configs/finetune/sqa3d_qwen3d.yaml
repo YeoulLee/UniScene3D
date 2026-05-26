@@ -78,7 +78,7 @@ model:
   qwen_model_path: "src/Qwen3.5-4B"
   voxel_size: 0.2
   num_visual_tokens: 512
-  max_new_tokens: 16
+  max_new_tokens: 32
   use_vision: True         # False = text-only baseline (no visual tokens)
   qwen_tuning: "full"      # "full" | "lora" | "frozen"
   gradient_checkpointing: True
