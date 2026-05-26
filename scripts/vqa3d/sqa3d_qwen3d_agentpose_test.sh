@@ -1,19 +1,20 @@
 #!/bin/bash
-# SQA3D test-set evaluation for the UniScene3D + Qwen3.5 model.
-# Loads a trained checkpoint (DeepSpeed save_state directory) and runs a
-# single generate pass on the SQA3D test split.
+# Test-set evaluation for checkpoints trained with sqa3d_qwen3d_agentpose.sh.
+# Defaults mirror the training script (NUM_TOKENS=1024, VOXEL_SIZE=0.1,
+# USE_AGENT_POSE=True) -- these MUST match the trained model or load_state_dict
+# will produce shape mismatches.
 #
 # Usage:
-#   CKPT_PATH=results/<EXP_NAME>/ckpt/best.pth bash scripts/vqa3d/sqa3d_qwen3d_test.sh
-# Override GPUs, etc.:
-#   GPUS=1 CKPT_PATH=results/<EXP_NAME>/ckpt/best.pth bash scripts/vqa3d/sqa3d_qwen3d_test.sh
+#   CKPT_PATH=results/<EXP>/ckpt/best.pth bash scripts/vqa3d/sqa3d_qwen3d_agentpose_test.sh
+# Override anything:
+#   GPUS=4 USE_UNANSWER=False CKPT_PATH=... bash scripts/vqa3d/sqa3d_qwen3d_agentpose_test.sh
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # ==== REQUIRED ====
 if [[ -z "${CKPT_PATH}" ]]; then
     echo "[ERROR] CKPT_PATH is required. Point it at the DeepSpeed save_state directory, e.g.:"
-    echo "        CKPT_PATH=results/qwen3d_lr2e-5_.../ckpt/best.pth bash $0"
+    echo "        CKPT_PATH=results/qwen3d_..._apTrue_.../ckpt/best.pth bash $0"
     exit 1
 fi
 if [[ ! -d "${CKPT_PATH}" ]]; then
@@ -22,14 +23,13 @@ if [[ ! -d "${CKPT_PATH}" ]]; then
 fi
 
 # ==== HYPERPARAMETERS (must match the trained model) ====
-VOXEL_SIZE="${VOXEL_SIZE:-0.2}"
-NUM_TOKENS="${NUM_TOKENS:-512}"
+VOXEL_SIZE="${VOXEL_SIZE:-0.1}"
+NUM_TOKENS="${NUM_TOKENS:-1024}"
 USE_VISION="${USE_VISION:-True}"
 USE_AGENT_POSE="${USE_AGENT_POSE:-True}"
 GPUS="${GPUS:-8}"
-TAG="${TAG:-test1}"
-# True = include all test questions (paper convention). False = restrict to
-# questions whose GT answer is in the 706-class candidate set (diagnostic only).
+TAG="${TAG:-ap_test}"
+# True = full test split (paper convention). False = answerable subset (diagnostic).
 USE_UNANSWER="${USE_UNANSWER:-True}"
 
 CONFIG="configs/finetune/sqa3d_qwen3d.yaml"
