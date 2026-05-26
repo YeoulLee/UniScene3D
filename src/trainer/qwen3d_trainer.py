@@ -75,8 +75,8 @@ class Qwen3DTrainer(BaseTrainer):
     def run(self):
         """Train, evaluate per epoch, and checkpoint."""
         if self.mode == "test":
-            # Eval-only: one generation pass, no training (e.g. text-only baseline).
-            self.eval_step(0, split="val")
+            # Eval-only: one generation pass on the SQA3D test split.
+            self.eval_step(0, split="test")
             self.accelerator.end_training()
             return
 
