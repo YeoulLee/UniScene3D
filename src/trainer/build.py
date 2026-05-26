@@ -146,7 +146,21 @@ class BaseTrainer():
         self.ckpt_path = Path(cfg.ckpt_path) if cfg.get("ckpt_path") else Path(cfg.exp_dir) / "ckpt" / "best.pth"
         # In test mode we want to load a fully trained checkpoint without going
         # through run.py's resume-reload path (which would clobber CLI overrides).
-        if cfg.resume or (self.mode == "test" and cfg.get("ckpt_path")):
+        if self.mode == "test" and cfg.get("ckpt_path"):
+            # Prefer a consolidated `pytorch_model.bin` produced by zero_to_fp32.py.
+            # Loaded into the unwrapped module so it works regardless of the
+            # current DP world size (vs accelerator.load_state which requires
+            # the same world size as when the checkpoint was saved).
+            consolidated = self.ckpt_path / "pytorch_model.bin"
+            if consolidated.exists():
+                print(f"📂 Loading consolidated weights from: {consolidated}")
+                state_dict = torch.load(str(consolidated), map_location="cpu")
+                raw_model = self.accelerator.unwrap_model(self.model)
+                missing, unexpected = raw_model.load_state_dict(state_dict, strict=False)
+                print(f"   missing: {len(missing)}, unexpected: {len(unexpected)}")
+            else:
+                self.resume()
+        elif cfg.resume:
             self.resume()
 
     def forward(self, data_dict):
