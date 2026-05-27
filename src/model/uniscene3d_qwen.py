@@ -54,6 +54,17 @@ class UniScene3DQwen(BaseModel):
             self.tokenizer.pad_token = self.tokenizer.eos_token
         llm_dim = self.qwen.config.text_config.hidden_size  # 2560
 
+        # Qwen-VL style vision-token wiring: the LLM expects a contiguous block
+        # of <|image_pad|> embeddings flanked by <|vision_start|>/<|vision_end|>.
+        # We tokenize this exactly into the prompt and replace the embeddings at
+        # <|image_pad|> positions with our projected scene tokens.
+        self.vision_start_id = self.tokenizer.convert_tokens_to_ids("<|vision_start|>")
+        self.vision_end_id = self.tokenizer.convert_tokens_to_ids("<|vision_end|>")
+        self.image_pad_id = self.tokenizer.convert_tokens_to_ids("<|image_pad|>")
+        if self.image_pad_id is None or self.image_pad_id == self.tokenizer.unk_token_id:
+            raise RuntimeError("Tokenizer is missing the <|image_pad|> special token.")
+        self.num_visual_tokens = m.get("num_visual_tokens", 512)
+
         # --- Qwen tuning mode: "full" | "lora" | "frozen" ---
         self.qwen_tuning = m.get("qwen_tuning", "full")
         if self.qwen_tuning not in ("full", "lora", "frozen"):
@@ -141,8 +152,22 @@ class UniScene3DQwen(BaseModel):
         return visual_embeds, voxel_mask
 
     def _build_prompt(self, situation, question):
-        """Plain text prompt; the answer span follows 'Answer:'."""
-        return f"Situation: {situation}\nQuestion: {question}\nAnswer:"
+        """Qwen-VL style prompt with an explicit vision block when use_vision.
+
+        Embeddings at the <|image_pad|> positions are later overwritten with
+        the projected scene tokens in forward/generate; the surrounding
+        <|vision_start|>/<|vision_end|> markers are the cues that activate
+        Qwen's pretrained vision-attention pathway.
+        """
+        if self.use_vision:
+            prefix = (
+                "<|vision_start|>"
+                + "<|image_pad|>" * self.num_visual_tokens
+                + "<|vision_end|>\n"
+            )
+        else:
+            prefix = ""
+        return f"{prefix}Situation: {situation}\nQuestion: {question}\nAnswer:"
 
     # ---- training forward ----------------------------------------------
     def forward(self, data_dict):
@@ -178,13 +203,17 @@ class UniScene3DQwen(BaseModel):
 
         if self.use_vision:
             visual_embeds, voxel_mask = self._scene_tokens(data_dict)
-            N = voxel_mask.shape[1]
             visual_embeds = visual_embeds.to(embed.weight.dtype)
-            inputs_embeds = torch.cat([visual_embeds, inputs_embeds], dim=1)
-            attention_mask = torch.cat([voxel_mask.long(), attention_mask], dim=1)
-            labels = torch.cat([
-                torch.full((B, N), -100, dtype=torch.long, device=device), labels,
-            ], dim=1)
+            # The prompt already contains num_visual_tokens copies of
+            # <|image_pad|>; overwrite their embeddings with our scene tokens
+            # and zero attention on invalid voxel slots.
+            image_pad_mask = text_ids == self.image_pad_id      # (B, T)
+            inputs_embeds = inputs_embeds.clone()
+            inputs_embeds[image_pad_mask] = visual_embeds.reshape(
+                -1, visual_embeds.size(-1)
+            )
+            attention_mask = attention_mask.clone()
+            attention_mask[image_pad_mask] = voxel_mask.long().flatten()
 
         out = self.qwen(
             inputs_embeds=inputs_embeds,
@@ -222,8 +251,13 @@ class UniScene3DQwen(BaseModel):
         if self.use_vision:
             visual_embeds, voxel_mask = self._scene_tokens(data_dict)
             visual_embeds = visual_embeds.to(embed.weight.dtype)
-            inputs_embeds = torch.cat([visual_embeds, inputs_embeds], dim=1)
-            attention_mask = torch.cat([voxel_mask.long(), attention_mask], dim=1)
+            image_pad_mask = text_ids == self.image_pad_id
+            inputs_embeds = inputs_embeds.clone()
+            inputs_embeds[image_pad_mask] = visual_embeds.reshape(
+                -1, visual_embeds.size(-1)
+            )
+            attention_mask = attention_mask.clone()
+            attention_mask[image_pad_mask] = voxel_mask.long().flatten()
 
         gen_ids = self.qwen.generate(
             inputs_embeds=inputs_embeds,
