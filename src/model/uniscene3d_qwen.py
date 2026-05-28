@@ -99,7 +99,12 @@ class UniScene3DQwen(BaseModel):
             max_tokens=m.get("num_visual_tokens", 512),
         )
         self.coord_pe = Sinusoidal3DPositionEncoding(dim=_FGCLIP_VIS_DIM)
-        self.projector = Qwen3DProjector(in_dim=_FGCLIP_VIS_DIM, out_dim=llm_dim)
+        # Match the projector output scale to Qwen's text-embedding std so the
+        # visual tokens are in-distribution (otherwise the LLM ignores them).
+        embed_std = self.qwen.get_input_embeddings().weight.detach().float().std().item()
+        self.projector = Qwen3DProjector(
+            in_dim=_FGCLIP_VIS_DIM, out_dim=llm_dim, output_std=embed_std,
+        )
 
         self.max_new_tokens = m.get("max_new_tokens", 16)
         # use_vision=False feeds text only (no visual tokens) -> text-only baseline.

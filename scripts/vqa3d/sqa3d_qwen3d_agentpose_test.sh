@@ -74,4 +74,5 @@ python launch.py --mode accelerate --gpu_per_node "$GPUS" --num_nodes 1 \
     model.use_agent_pose="$USE_AGENT_POSE" \
     data.ScanNetSQA3DGen.test.use_unanswer="$USE_UNANSWER" \
     eval.save=True \
+    "$@" \
     2>&1 | tee "$LOGFILE"
