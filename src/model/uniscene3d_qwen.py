@@ -108,6 +108,8 @@ class UniScene3DQwen(BaseModel):
         # frame before the 3D PE, so situation pose is injected geometrically
         # instead of being learned purely from the textual situation sentence.
         self.use_agent_pose = m.get("use_agent_pose", True)
+        # Set model.debug_vision=True (CLI) to print visual-token diagnostics.
+        self._debug_vision = m.get("debug_vision", False)
 
     def train(self, mode=True):
         """Keep the frozen FG-CLIP encoder in eval mode regardless of mode."""
@@ -149,6 +151,17 @@ class UniScene3DQwen(BaseModel):
         with autocast("cuda", dtype=torch.bfloat16):
             voxel_feat = voxel_feat + self.coord_pe(voxel_coord)  # (B, N, vis_dim)
             visual_embeds = self.projector(voxel_feat)            # (B, N, llm_dim)
+        if getattr(self, "_debug_vision", False):
+            ve = self.qwen.get_input_embeddings().weight
+            print(
+                f"[VDBG] valid_voxels/sample={voxel_mask.sum(dim=1).tolist()} "
+                f"N={voxel_mask.shape[1]} | "
+                f"visual std={visual_embeds.float().std().item():.4f} "
+                f"mean={visual_embeds.float().mean().item():.4f} | "
+                f"qwen_embed std={ve.float().std().item():.4f} "
+                f"has_nan={torch.isnan(visual_embeds).any().item()}",
+                flush=True,
+            )
         return visual_embeds, voxel_mask
 
     def _build_prompt(self, situation, question):
@@ -258,6 +271,15 @@ class UniScene3DQwen(BaseModel):
             )
             attention_mask = attention_mask.clone()
             attention_mask[image_pad_mask] = voxel_mask.long().flatten()
+            if getattr(self, "_debug_vision", False):
+                pad_per_row = image_pad_mask.sum(dim=1).tolist()
+                attended = attention_mask[image_pad_mask].float().mean().item()
+                print(
+                    f"[VDBG-gen] image_pads/row={pad_per_row} "
+                    f"expected={self.num_visual_tokens} | "
+                    f"visual_attended_frac={attended:.3f}",
+                    flush=True,
+                )
 
         gen_ids = self.qwen.generate(
             inputs_embeds=inputs_embeds,
